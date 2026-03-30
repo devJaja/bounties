@@ -161,6 +161,7 @@ class ContractEventPoller {
   private server: rpc.Server;
   private timer: ReturnType<typeof setInterval> | null = null;
   private latestLedger = 0;
+  private isPolling = false;
   private subscribers: Set<EventCallback> = new Set();
   private queryClient: QueryClient | null = null;
 
@@ -178,7 +179,8 @@ class ContractEventPoller {
   }
 
   private async poll() {
-    if (!BOUNTY_CONTRACT_ID) return;
+    if (this.isPolling || !BOUNTY_CONTRACT_ID) return;
+    this.isPolling = true;
 
     try {
       const currentLedger = await this.fetchLatestLedger();
@@ -188,31 +190,58 @@ class ContractEventPoller {
 
       if (startLedger > currentLedger) return;
 
-      const response = await this.server.getEvents({
-        startLedger,
-        filters: [
-          {
-            type: "contract",
-            contractIds: [BOUNTY_CONTRACT_ID],
-          },
-        ],
-        limit: 100,
-      });
+      let cursor: string | undefined;
+      let hasMore = true;
 
-      if (response.events?.length) {
-        for (const raw of response.events) {
-          const parsed = parseRawEvent(raw);
-          if (!parsed) continue;
-          this.subscribers.forEach((cb) => cb(parsed));
-          if (this.queryClient) {
-            dispatchCacheInvalidations(parsed, this.queryClient);
+      while (hasMore) {
+        const request = cursor
+          ? {
+              cursor,
+              filters: [
+                {
+                  type: "contract" as const,
+                  contractIds: [BOUNTY_CONTRACT_ID],
+                },
+              ],
+              limit: 100,
+            }
+          : {
+              startLedger,
+              filters: [
+                {
+                  type: "contract" as const,
+                  contractIds: [BOUNTY_CONTRACT_ID],
+                },
+              ],
+              limit: 100,
+            };
+
+        const response = await this.server.getEvents(request);
+
+        if (response.events?.length) {
+          for (const raw of response.events) {
+            const parsed = parseRawEvent(raw);
+            if (!parsed) continue;
+            this.subscribers.forEach((cb) => cb(parsed));
+            if (this.queryClient) {
+              dispatchCacheInvalidations(parsed, this.queryClient);
+            }
           }
+          if (response.events.length === 100) {
+            cursor = response.events[response.events.length - 1].id;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
         }
       }
 
       this.latestLedger = currentLedger;
     } catch (err) {
       console.error("[ContractEventPoller] poll error:", err);
+    } finally {
+      this.isPolling = false;
     }
   }
 
