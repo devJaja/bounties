@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -27,6 +28,16 @@ export function GlobalNavbar() {
   const pathname = usePathname();
   const { walletInfo, isConnected, isRegistered, connect, isLoading } =
     useSmartWallet();
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Close dialog when connected
+  useEffect(() => {
+    if (isConnected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsDialogOpen(false);
+    }
+  }, [isConnected]);
 
   const activeWalletInfo: WalletInfo = walletInfo || {
     address: "",
@@ -143,7 +154,7 @@ export function GlobalNavbar() {
                   {isLoading ? "Connecting..." : "Connect Wallet"}
                 </Button>
               ) : (
-                <Dialog>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm" disabled={isLoading}>
                       <Fingerprint className="h-4 w-4 mr-2" />
@@ -156,7 +167,9 @@ export function GlobalNavbar() {
                         Biometric Smart Wallet
                       </DialogTitle>
                     </DialogHeader>
-                    <SecureAccountStep />
+                    <SecureAccountStep
+                      onSuccess={() => setIsDialogOpen(false)}
+                    />
                   </DialogContent>
                 </Dialog>
               )}

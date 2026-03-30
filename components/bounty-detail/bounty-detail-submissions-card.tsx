@@ -21,7 +21,6 @@ import {
   useMarkSubmissionPaid,
 } from "@/hooks/use-submission-mutations";
 import { authClient } from "@/lib/auth-client";
-import { useSmartWallet } from "@/components/providers/smart-wallet-provider";
 import { useSubmissionDraft } from "@/hooks/use-submission-draft";
 
 interface ExtendedUser {
@@ -45,8 +44,6 @@ export function BountyDetailSubmissionsCard({
   bounty,
 }: BountyDetailSubmissionsCardProps) {
   const { data: session } = authClient.useSession();
-  const { walletInfo: _smartWallet, isConnected: _isSmartWalletConnected } =
-    useSmartWallet();
   const submissions = bounty.submissions || [];
   const { draft, clearDraft, autoSave } = useSubmissionDraft(bounty.id);
 

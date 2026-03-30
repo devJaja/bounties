@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/card";
 import { CheckCircle2, ShieldAlert, Fingerprint, Loader2 } from "lucide-react";
 
-export function SecureAccountStep() {
+interface SecureAccountStepProps {
+  onSuccess?: () => void;
+}
+
+export function SecureAccountStep({ onSuccess }: SecureAccountStepProps) {
   const { registerSession, isConnected, walletInfo } = useSmartWallet();
   const [userName, setUserName] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
@@ -44,6 +48,7 @@ export function SecureAccountStep() {
       // We will perform initialization directly in the background or use the generated address if returned.
       // But provider handles it, so we can just wait a tick or just display success.
       setStep("success");
+      onSuccess?.();
     } catch (err) {
       console.error(err);
       setError(
@@ -74,7 +79,7 @@ export function SecureAccountStep() {
     );
   }
 
-  if (step === "success" && isConnected) {
+  if (step === "success" && isConnected && walletInfo?.address) {
     return (
       <Card className="w-full max-w-md mx-auto mt-8 border-green-500/30">
         <CardHeader className="text-center">

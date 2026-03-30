@@ -9,28 +9,46 @@ import { SMART_WALLET_CONFIG } from "./config";
 // Singleton instance wrapper
 let smartAccountKitInstance: SmartAccountKit | null = null;
 let walletAdapterInstance: StellarWalletsKitAdapter | null = null;
+let smartAccountKitInitPromise: Promise<SmartAccountKit> | null = null;
+let walletAdapterInitPromise: Promise<StellarWalletsKitAdapter> | null = null;
 
 export const getSmartAccountKit = async (): Promise<SmartAccountKit> => {
   if (smartAccountKitInstance) return smartAccountKitInstance;
 
-  // Initialize wallet adapter
-  walletAdapterInstance = new StellarWalletsKitAdapter({
-    network: SMART_WALLET_CONFIG.networkPassphrase,
-  });
-  await walletAdapterInstance.init();
+  if (!smartAccountKitInitPromise) {
+    smartAccountKitInitPromise = (async () => {
+      try {
+        if (!walletAdapterInitPromise) {
+          walletAdapterInitPromise = (async () => {
+            const adapter = new StellarWalletsKitAdapter({
+              network: SMART_WALLET_CONFIG.networkPassphrase,
+            });
+            await adapter.init();
+            return adapter;
+          })();
+        }
+        walletAdapterInstance = await walletAdapterInitPromise;
 
-  smartAccountKitInstance = new SmartAccountKit({
-    rpcUrl: SMART_WALLET_CONFIG.rpcUrl,
-    networkPassphrase: SMART_WALLET_CONFIG.networkPassphrase,
-    accountWasmHash: SMART_WALLET_CONFIG.accountWasmHash,
-    webauthnVerifierAddress: SMART_WALLET_CONFIG.webauthnVerifierAddress,
-    storage: new IndexedDBStorage(),
-    rpName: "Bounties Application",
-    externalWallet: walletAdapterInstance,
-    relayerUrl: SMART_WALLET_CONFIG.relayerUrl || undefined,
-  });
-
-  return smartAccountKitInstance;
+        const kit = new SmartAccountKit({
+          rpcUrl: SMART_WALLET_CONFIG.rpcUrl,
+          networkPassphrase: SMART_WALLET_CONFIG.networkPassphrase,
+          accountWasmHash: SMART_WALLET_CONFIG.accountWasmHash,
+          webauthnVerifierAddress: SMART_WALLET_CONFIG.webauthnVerifierAddress,
+          storage: new IndexedDBStorage(),
+          rpName: "Bounties Application",
+          externalWallet: walletAdapterInstance,
+          relayerUrl: SMART_WALLET_CONFIG.relayerUrl || undefined,
+        });
+        smartAccountKitInstance = kit;
+        return kit;
+      } catch (error) {
+        smartAccountKitInitPromise = null;
+        walletAdapterInitPromise = null;
+        throw error;
+      }
+    })();
+  }
+  return await smartAccountKitInitPromise;
 };
 
 // Returns { contractId, credentialId, submitResult }
@@ -41,14 +59,15 @@ export const createSmartWallet = async (userName: string) => {
     autoSubmit: true,
   });
 
-  if (!result.submitResult?.success && result.submitResult?.error) {
-    throw new Error(`Deployment failed: ${result.submitResult.error}`);
+  if (!result.submitResult || !result.submitResult.success) {
+    const errorMsg = result.submitResult?.error || "Unknown deployment error";
+    throw new Error(`Deployment failed: ${errorMsg}`);
   }
 
   return {
     contractId: result.contractId,
     credentialId: result.credentialId,
-    hash: result.submitResult?.hash,
+    hash: result.submitResult.hash,
   };
 };
 
@@ -105,16 +124,23 @@ export const transfer = async (
 };
 
 export const fetchSacTokenBalance = async (
-  tokenContract: string,
   walletContractId: string,
+  tokenContract?: string,
 ) => {
   try {
     const server = new rpc.Server(SMART_WALLET_CONFIG.rpcUrl);
     // STROOPS_PER_XLM is 10000000
     const STROOPS_PER_XLM = 10000000;
+
+    const asset =
+      tokenContract && tokenContract !== SMART_WALLET_CONFIG.nativeTokenContract
+        ? new Asset("XLM", "") // This is a placeholder for how you'd construct a non-native asset if tokenContract is an address
+        : Asset.native();
+
+    // Note: getSACBalance is a specialized helper for Soroban-token-wrapped balances.
     const result = await server.getSACBalance(
       walletContractId,
-      Asset.native(),
+      asset,
       SMART_WALLET_CONFIG.networkPassphrase,
     );
     if (result.balanceEntry) {

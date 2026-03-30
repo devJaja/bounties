@@ -8,7 +8,6 @@ import {
   disconnectSmartWallet as apiDisconnectWallet,
   fetchSacTokenBalance,
 } from "@/lib/smart-wallet/client";
-import { SMART_WALLET_CONFIG } from "@/lib/smart-wallet/config";
 import { WalletInfo } from "@/types/wallet";
 import { toast } from "sonner";
 
@@ -36,16 +35,13 @@ export function SmartWalletProvider({
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Load registration state from localStorage on mount
-  useEffect(() => {
-    const registered =
-      localStorage.getItem("bounties:passkey_registered") === "true";
-    if (registered) setIsRegistered(true);
-  }, []);
-
   useEffect(() => {
     const init = async () => {
       try {
+        const registered =
+          localStorage.getItem("bounties:passkey_registered") === "true";
+        if (registered) setIsRegistered(true);
+
         const kit = await getSmartAccountKit();
 
         // Check if any credentials are pending deployment
@@ -56,10 +52,7 @@ export function SmartWalletProvider({
         if (result?.contractId) {
           localStorage.setItem("bounties:passkey_registered", "true");
           setIsRegistered(true);
-          const balanceAmount = await fetchSacTokenBalance(
-            SMART_WALLET_CONFIG.nativeTokenContract,
-            result.contractId,
-          );
+          const balanceAmount = await fetchSacTokenBalance(result.contractId);
 
           setWalletInfo({
             address: result.contractId,
@@ -87,10 +80,7 @@ export function SmartWalletProvider({
     try {
       const result = await apiCreateWallet(userName);
 
-      const balanceAmount = await fetchSacTokenBalance(
-        SMART_WALLET_CONFIG.nativeTokenContract,
-        result.contractId,
-      );
+      const balanceAmount = await fetchSacTokenBalance(result.contractId);
 
       setWalletInfo({
         address: result.contractId,
@@ -127,10 +117,7 @@ export function SmartWalletProvider({
         throw new Error("No smart account found for this passkey.");
       }
 
-      const balanceAmount = await fetchSacTokenBalance(
-        SMART_WALLET_CONFIG.nativeTokenContract,
-        result.contractId,
-      );
+      const balanceAmount = await fetchSacTokenBalance(result.contractId);
 
       setWalletInfo({
         address: result.contractId,
