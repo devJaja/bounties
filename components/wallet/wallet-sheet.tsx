@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-
-import { useState } from "react";
 import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -11,21 +11,19 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
+import { AccountLink } from "@/components/ui/stellar-link";
+import { WalletInfo } from "@/types/wallet";
+import { formatDistanceToNow } from "date-fns";
 import {
-  Wallet,
-  Copy,
-  Check,
-  Shield,
-  ExternalLink,
-  ArrowUpRight,
   ArrowDownLeft,
+  ArrowUpRight,
+  Check,
+  ExternalLink,
   Loader2,
   LogOut,
+  Shield,
+  Wallet,
 } from "lucide-react";
-import { WalletInfo } from "@/types/wallet";
-import { truncateStellarAddress } from "@/lib/mock-wallet";
-import { formatDistanceToNow } from "date-fns";
 import { useSmartWallet } from "@/components/providers/smart-wallet-provider";
 
 interface WalletSheetProps {
@@ -35,19 +33,6 @@ interface WalletSheetProps {
 
 export function WalletSheet({ walletInfo, trigger }: WalletSheetProps) {
   const { disconnect, isLoading } = useSmartWallet();
-  const [copied, setCopied] = useState(false);
-
-  // ... (rest of the component)
-
-  const handleCopyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(walletInfo.address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy address:", error);
-    }
-  };
 
   const formatCurrency = (amount: number, currency: string = "USD") => {
     if (currency === "USD") {
@@ -89,30 +74,15 @@ export function WalletSheet({ walletInfo, trigger }: WalletSheetProps) {
             </div>
           </SheetTitle>
 
-          {/* Integrated Address with Copy */}
-          <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3 border border-border">
-            <div className="min-w-0 flex-1">
-              <div className="text-xs text-muted-foreground mb-1">
-                Wallet Address
-              </div>
-              <div className="truncate font-mono text-xs sm:text-sm">
-                {truncateStellarAddress(walletInfo.address)}
-              </div>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopyAddress}
-              className="ml-2 shrink-0 h-8 w-8 p-0"
-              title={copied ? "Copied!" : "Copy address"}
-            >
-              {copied ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
+          {/* Integrated Address with AccountLink */}
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">Wallet Address</div>
+            <AccountLink
+              value={walletInfo.address}
+              maxLength={16}
+              showCopy={true}
+              className="font-mono text-xs w-full justify-between rounded-lg bg-muted/50 p-3 border border-border"
+            />
           </div>
         </SheetHeader>
 

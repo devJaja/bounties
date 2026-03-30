@@ -1,11 +1,11 @@
 import { Networks } from "@stellar/stellar-sdk";
 
-const requireEnv = (name: string, fallback: string) => {
+const requireEnv = (name: string, fallback?: string) => {
   const value = process.env[name];
-  if (process.env.NODE_ENV === "production" && !value) {
+  if (!value && !fallback) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
-  return value || fallback;
+  return value || fallback || "";
 };
 
 export const SMART_WALLET_CONFIG = {

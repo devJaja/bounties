@@ -87,10 +87,7 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
         <HeaderCard bounty={bounty} />
         <DescriptionCard description={bounty.description} />
         {!isCancelled && pool && <EscrowDetailPanel poolId={bountyId} />}
-        <RefundStatusTracker
-          bountyId={bountyId}
-          isCancelled={isCancelled}
-        />
+        <RefundStatusTracker bountyId={bountyId} isCancelled={isCancelled} />
         <BountyDetailSubmissionsCard bounty={bounty} />
       </div>
 
@@ -107,4 +104,3 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
     </div>
   );
 }
-

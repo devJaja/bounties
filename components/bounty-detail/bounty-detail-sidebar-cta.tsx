@@ -237,9 +237,7 @@ export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
               onClick={handleCancel}
               disabled={!cancelReason.trim() || isCancelling}
             >
-              {isCancelling && (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              )}
+              {isCancelling && <Loader2 className="mr-2 size-4 animate-spin" />}
               Cancel Bounty & Refund
             </Button>
           </AlertDialogFooter>
@@ -346,9 +344,7 @@ export function MobileCTA({ bounty, onCancelled }: MobileCTAProps) {
               onClick={handleCancel}
               disabled={!cancelReason.trim() || isCancelling}
             >
-              {isCancelling && (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              )}
+              {isCancelling && <Loader2 className="mr-2 size-4 animate-spin" />}
               Cancel & Refund
             </Button>
           </AlertDialogFooter>
@@ -357,4 +353,3 @@ export function MobileCTA({ bounty, onCancelled }: MobileCTAProps) {
     </div>
   );
 }
-

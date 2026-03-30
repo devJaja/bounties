@@ -55,4 +55,3 @@ export function useCancellation(bountyId: string, enabled = true) {
     enabled: !!bountyId && enabled,
   });
 }
-

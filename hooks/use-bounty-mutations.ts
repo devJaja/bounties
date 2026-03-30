@@ -59,10 +59,8 @@ export function useCreateBounty() {
 
   return {
     ...mutation,
-    mutate: (
-      input: CreateBountyInput,
-      options?: CreateBountyMutateOptions,
-    ) => mutation.mutate({ input }, options),
+    mutate: (input: CreateBountyInput, options?: CreateBountyMutateOptions) =>
+      mutation.mutate({ input }, options),
     mutateAsync: (
       input: CreateBountyInput,
       options?: CreateBountyMutateOptions,
@@ -193,14 +191,10 @@ export function useDeleteBounty() {
 
   return {
     ...mutation,
-    mutate: (
-      id: string,
-      options?: DeleteBountyMutateOptions,
-    ) => mutation.mutate({ id }, options),
-    mutateAsync: (
-      id: string,
-      options?: DeleteBountyMutateOptions,
-    ) => mutation.mutateAsync({ id }, options),
+    mutate: (id: string, options?: DeleteBountyMutateOptions) =>
+      mutation.mutate({ id }, options),
+    mutateAsync: (id: string, options?: DeleteBountyMutateOptions) =>
+      mutation.mutateAsync({ id }, options),
   };
 }
 
@@ -229,14 +223,9 @@ export function useClaimBounty() {
 
   return {
     ...mutation,
-    mutate: (
-      id: string,
-      options?: UpdateBountyMutateOptions,
-    ) => mutation.mutate({ input: { id, status: "IN_PROGRESS" } }, options),
-    mutateAsync: (
-      id: string,
-      options?: UpdateBountyMutateOptions,
-    ) =>
+    mutate: (id: string, options?: UpdateBountyMutateOptions) =>
+      mutation.mutate({ input: { id, status: "IN_PROGRESS" } }, options),
+    mutateAsync: (id: string, options?: UpdateBountyMutateOptions) =>
       mutation.mutateAsync({ input: { id, status: "IN_PROGRESS" } }, options),
   };
 }
@@ -313,4 +302,3 @@ export function useCancelBounty() {
       mutation.mutateAsync({ input: { id, status: "CANCELLED" } }, options),
   };
 }
-

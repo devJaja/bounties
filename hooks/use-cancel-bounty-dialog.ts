@@ -41,7 +41,10 @@ export function useCancelBountyDialog(
           reason: cancelReason.trim(),
         });
       } catch (mutationErr) {
-        console.error("GraphQL mutation failed, reverting escrow:", mutationErr);
+        console.error(
+          "GraphQL mutation failed, reverting escrow:",
+          mutationErr,
+        );
         await EscrowService.revertCancel(bountyId);
         throw mutationErr;
       }
