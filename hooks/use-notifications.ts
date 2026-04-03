@@ -90,37 +90,27 @@ export function useNotifications() {
   const isEnabled = Boolean(session?.user);
   const userId = session?.user?.id ?? null;
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
-    userId ? loadFromStorage(userId) : [],
-  );
-  const [hydrated, setHydrated] = useState(() => Boolean(userId));
+  // Initialize state with lazy loading from localStorage
+  // This runs only once during initial render, avoiding setState in effect
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    if (typeof window === "undefined" || !userId) return [];
+    return loadFromStorage(userId);
+  });
 
-  // Sync state with userId changes during render
-  // This is faster than useEffect and avoids cascading renders
+  // Reset on user change - this is allowed during render as it's a state update
+  // based on a condition change (userId)
   const prevHydratedUserIdRef = useRef(userId);
   if (prevHydratedUserIdRef.current !== userId) {
     prevHydratedUserIdRef.current = userId;
     setNotifications(userId ? loadFromStorage(userId) : []);
-    setHydrated(true);
   }
-
-  // Handle initial client-side hydration
-  useEffect(() => {
-    if (!hydrated) {
-      if (userId) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setNotifications(loadFromStorage(userId));
-      }
-      setHydrated(true);
-    }
-  }, [userId, hydrated]);
 
   // Persist to localStorage whenever notifications change
   useEffect(() => {
-    if (userId && hydrated) {
+    if (userId) {
       saveToStorage(userId, notifications);
     }
-  }, [notifications, userId, hydrated]);
+  }, [notifications, userId]);
 
   // Helper to update notifications with cache invalidation
   const addNotification = useCallback(
@@ -234,7 +224,7 @@ export function useNotifications() {
     [notifications],
   );
 
-  const isLoading = session === undefined || !hydrated;
+  const isLoading = session === undefined;
 
   const markAsRead = useCallback((id: string, type: NotificationType) => {
     setNotifications((previous) =>

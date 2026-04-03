@@ -13,6 +13,7 @@ import {
   EarningsSummary,
   type EarningsSummary as EarningsSummaryType,
 } from "@/components/reputation/earnings-summary";
+import { ReputationDashboard } from "@/components/profile/reputation-dashboard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +22,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
 import { useCompletionHistory } from "@/hooks/use-reputation";
+import { ContributorReputationWithMetrics } from "@/types/reputation";
 
 export default function ProfilePage() {
   const params = useParams();
@@ -205,6 +207,12 @@ export default function ProfilePage() {
                 Bounty History
               </TabsTrigger>
               <TabsTrigger
+                value="dashboard"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+              >
+                Reputation Dashboard
+              </TabsTrigger>
+              <TabsTrigger
                 value="analytics"
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
               >
@@ -237,6 +245,23 @@ export default function ProfilePage() {
                   records={records}
                   description={`Showing the last ${records.length} completed bounties.`}
                 />
+              )}
+            </TabsContent>
+
+            <TabsContent value="dashboard" className="mt-6">
+              <h2 className="text-xl font-bold mb-4">Reputation Dashboard</h2>
+              {"metrics" in reputation && reputation.metrics ? (
+                <ReputationDashboard
+                  reputation={reputation as ContributorReputationWithMetrics}
+                />
+              ) : (
+                <div className="p-8 border rounded-lg text-center text-muted-foreground bg-secondary/5">
+                  <p>Reputation metrics are not available yet.</p>
+                  <p className="text-sm mt-2">
+                    This feature will be enabled when the backend supports
+                    extended metrics.
+                  </p>
+                </div>
               )}
             </TabsContent>
 
