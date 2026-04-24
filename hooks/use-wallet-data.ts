@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchAllAssetBalances } from "@/lib/stellar/assets";
+import {
+  fetchAllAssetBalances,
+  fetchAssetPricesUsd,
+} from "@/lib/stellar/assets";
 import { fetchAccountTransactions } from "@/lib/stellar/horizon";
 import { rpc, xdr, scValToNative, Address } from "@stellar/stellar-sdk";
 import { SMART_WALLET_CONFIG } from "@/lib/smart-wallet/config";
@@ -69,12 +72,14 @@ async function fetchEscrowSummary(
 
     if (response?.val) {
       const native = scValToNative(response.val.contractData().val());
-      const totalLocked =
+      const xlmUnits =
         typeof native === "bigint"
           ? Number(native) / 10_000_000
           : typeof native === "number"
             ? native
             : 0;
+      const prices = await fetchAssetPricesUsd();
+      const totalLocked = xlmUnits * (prices["XLM"] ?? 0.12);
       return { totalLocked, entries: [] };
     }
   } catch {

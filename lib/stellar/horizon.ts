@@ -47,12 +47,12 @@ export async function fetchAccountTransactions(
         const amount = parseFloat(op.amount ?? "0");
         const isIncoming = op.to === address;
         const asset =
-          op.asset_type === "native" ? "XLM" : (op.asset_code ?? "XLM");
+          op.asset_type === "native" ? "XLM" : (op.asset_code ?? "UNKNOWN");
         const counterparty = isIncoming ? op.from : op.to;
 
         return {
           id: op.id || `tx-${index}`,
-          type: isIncoming ? ("earning" as const) : ("withdrawal" as const),
+          type: isIncoming ? ("deposit" as const) : ("withdrawal" as const),
           amount,
           currency: asset,
           date: op.created_at,

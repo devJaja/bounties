@@ -112,5 +112,5 @@ export async function fetchAllAssetBalances(
     }),
   );
 
-  return results.filter((a) => a.amount > 0);
+  return results;
 }

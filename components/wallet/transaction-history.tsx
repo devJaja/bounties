@@ -179,12 +179,11 @@ export function TransactionHistory({ activity }: TransactionHistoryProps) {
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`p-1.5 rounded-full ${item.type === "earning" ? "bg-green-500/10" : "bg-orange-500/10"}`}
+                          className={`p-1.5 rounded-full ${item.type === "earning" || item.type === "deposit" ? "bg-green-500/10" : "bg-orange-500/10"}`}
                         >
-                          {item.type === "earning" ? (
-                            <ArrowDownLeft
-                              className={`h-4 w-4 ${item.type === "earning" ? "text-green-500" : "text-orange-500"}`}
-                            />
+                          {item.type === "earning" ||
+                          item.type === "deposit" ? (
+                            <ArrowDownLeft className="h-4 w-4 text-green-500" />
                           ) : (
                             <ArrowUpRight className="h-4 w-4 text-orange-500" />
                           )}
@@ -199,9 +198,11 @@ export function TransactionHistory({ activity }: TransactionHistoryProps) {
                     </td>
                     <td className="py-4 px-4 text-right">
                       <span
-                        className={`font-semibold ${item.type === "earning" ? "text-green-500" : ""}`}
+                        className={`font-semibold ${item.type === "earning" || item.type === "deposit" ? "text-green-500" : ""}`}
                       >
-                        {item.type === "earning" ? "+" : "-"}{" "}
+                        {item.type === "earning" || item.type === "deposit"
+                          ? "+"
+                          : "-"}{" "}
                         {formatCurrency(item.amount, item.currency)}
                       </span>
                     </td>

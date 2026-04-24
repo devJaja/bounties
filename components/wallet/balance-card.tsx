@@ -62,9 +62,7 @@ export function BalanceCard({
           <h2 className="text-5xl font-bold tracking-tight">
             {formatCurrency(walletInfo.balance + pendingEarnings)}
           </h2>
-          <p className="text-xs text-muted-foreground mt-2">
-            {walletInfo.balanceCurrency}
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">USD</p>
         </div>
 
         <div className="grid grid-cols-2 gap-8 md:text-right">
