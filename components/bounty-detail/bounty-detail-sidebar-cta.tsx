@@ -8,6 +8,7 @@ import {
   AlertCircle,
   XCircle,
   Loader2,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,11 +23,15 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 import { BountyFieldsFragment } from "@/lib/graphql/generated";
 import { StatusBadge, TypeBadge } from "./bounty-badges";
 import { FcfsClaimButton } from "@/components/bounty/fcfs-claim-button";
+import { CompetitionSubmission } from "@/components/bounty/competition-submission";
+import { CompetitionStatus } from "@/components/bounty/competition-status";
 import { authClient } from "@/lib/auth-client";
+import { useJoinCompetition, ContestError } from "@/hooks/use-competition-bounty";
 import type { CancellationRecord } from "@/types/escrow";
 import { useCancelBountyDialog } from "@/hooks/use-cancel-bounty-dialog";
 
@@ -37,7 +42,9 @@ interface SidebarCTAProps {
 
 export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
   const [copied, setCopied] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
   const { data: session } = authClient.useSession();
+  const joinMutation = useJoinCompetition();
 
   const {
     cancelDialogOpen,
@@ -50,9 +57,46 @@ export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
 
   const canAct = bounty.status === "OPEN";
   const isFcfs = bounty.type === "FIXED_PRICE";
-  const isCreator = session?.user?.id === bounty.createdBy;
+  const isCompetition = bounty.type === "COMPETITION";
+  const isCreator =
+    (session?.user as { id?: string } | undefined)?.id === bounty.createdBy;
   const canCancel =
     isCreator && (bounty.status === "OPEN" || bounty.status === "IN_PROGRESS");
+
+  const walletAddress =
+    (session?.user as { walletAddress?: string; address?: string } | undefined)
+      ?.walletAddress ||
+    (session?.user as { walletAddress?: string; address?: string } | undefined)
+      ?.address ||
+    null;
+
+  // Competition-specific derived values
+  const submissionCount = bounty._count?.submissions ?? 0;
+  const maxParticipants = (bounty as { maxParticipants?: number | null })
+    .maxParticipants ?? null;
+  const deadline = bounty.bountyWindow?.endDate ?? null;
+  const isFinalized = bounty.status === "COMPLETED";
+
+  const handleJoinCompetition = async () => {
+    if (!walletAddress) {
+      toast.error("Connect your wallet to join this competition.");
+      return;
+    }
+    try {
+      await joinMutation.mutateAsync({
+        bountyId: bounty.id,
+        contributorAddress: walletAddress,
+      });
+      setHasJoined(true);
+      toast.success("You've joined the competition!");
+    } catch (err) {
+      if (err instanceof ContestError && err.code === "already_joined") {
+        setHasJoined(true);
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : "Failed to join.");
+    }
+  };
 
   const handleCopy = async () => {
     try {
@@ -116,9 +160,45 @@ export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
 
         <Separator className="bg-gray-800/60" />
 
+        {/* Competition slot count */}
+        {isCompetition && (
+          <div className="flex items-center justify-between text-sm text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <Users className="size-3.5" />
+              Slots
+            </span>
+            <span className="font-medium text-gray-200">
+              {submissionCount}
+              {maxParticipants != null ? `/${maxParticipants}` : ""} joined
+            </span>
+          </div>
+        )}
+
+        {isCompetition && <Separator className="bg-gray-800/60" />}
+
         {/* CTA */}
         {isFcfs ? (
           <FcfsClaimButton bounty={bounty} />
+        ) : isCompetition ? (
+          hasJoined ? (
+            <Button className="w-full h-11 font-bold tracking-wide" disabled size="lg">
+              Joined ✓
+            </Button>
+          ) : (
+            <Button
+              className="w-full h-11 font-bold tracking-wide"
+              disabled={!canAct || joinMutation.isPending}
+              size="lg"
+              onClick={() => void handleJoinCompetition()}
+            >
+              {joinMutation.isPending ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Users className="mr-2 size-4" />
+              )}
+              {canAct ? "Join Competition" : ctaLabel()}
+            </Button>
+          )
         ) : (
           <Button
             className="w-full h-11 font-bold tracking-wide"
@@ -137,7 +217,7 @@ export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
           </Button>
         )}
 
-        {!canAct && (
+        {!canAct && !isCompetition && (
           <p className="flex items-center gap-1.5 text-xs text-gray-500 justify-center text-center">
             <AlertCircle className="size-3 shrink-0" />
             This bounty is no longer accepting new submissions.
@@ -189,6 +269,24 @@ export function SidebarCTA({ bounty, onCancelled }: SidebarCTAProps) {
           )}
         </button>
       </div>
+
+      {/* Competition status + submission panel */}
+      {isCompetition && (
+        <>
+          <CompetitionStatus
+            participantCount={submissionCount}
+            maxParticipants={maxParticipants}
+            submissionCount={submissionCount}
+            deadline={deadline}
+            isFinalized={isFinalized}
+          />
+          <CompetitionSubmission
+            bountyId={bounty.id}
+            deadline={deadline}
+            hasJoined={hasJoined}
+          />
+        </>
+      )}
 
       {/* Cancel Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
@@ -262,7 +360,9 @@ interface MobileCTAProps {
 }
 
 export function MobileCTA({ bounty, onCancelled }: MobileCTAProps) {
+  const [hasJoined, setHasJoined] = useState(false);
   const { data: session } = authClient.useSession();
+  const joinMutation = useJoinCompetition();
 
   const {
     cancelDialogOpen,
@@ -275,9 +375,39 @@ export function MobileCTA({ bounty, onCancelled }: MobileCTAProps) {
 
   const canAct = bounty.status === "OPEN";
   const isFcfs = bounty.type === "FIXED_PRICE";
-  const isCreator = session?.user?.id === bounty.createdBy;
+  const isCompetition = bounty.type === "COMPETITION";
+  const isCreator =
+    (session?.user as { id?: string } | undefined)?.id === bounty.createdBy;
   const canCancel =
     isCreator && (bounty.status === "OPEN" || bounty.status === "IN_PROGRESS");
+
+  const walletAddress =
+    (session?.user as { walletAddress?: string; address?: string } | undefined)
+      ?.walletAddress ||
+    (session?.user as { walletAddress?: string; address?: string } | undefined)
+      ?.address ||
+    null;
+
+  const handleJoin = async () => {
+    if (!walletAddress) {
+      toast.error("Connect your wallet to join.");
+      return;
+    }
+    try {
+      await joinMutation.mutateAsync({
+        bountyId: bounty.id,
+        contributorAddress: walletAddress,
+      });
+      setHasJoined(true);
+      toast.success("You've joined the competition!");
+    } catch (err) {
+      if (err instanceof ContestError && err.code === "already_joined") {
+        setHasJoined(true);
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : "Failed to join.");
+    }
+  };
 
   const label = () => {
     if (!canAct) {
@@ -297,6 +427,20 @@ export function MobileCTA({ bounty, onCancelled }: MobileCTAProps) {
     <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-xl border-t border-gray-800/60 z-20">
       {isFcfs ? (
         <FcfsClaimButton bounty={bounty} />
+      ) : isCompetition ? (
+        <Button
+          className="w-full h-11 font-bold tracking-wide"
+          disabled={!canAct || hasJoined || joinMutation.isPending}
+          size="lg"
+          onClick={() => void handleJoin()}
+        >
+          {joinMutation.isPending ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <Users className="mr-2 size-4" />
+          )}
+          {hasJoined ? "Joined ✓" : canAct ? "Join Competition" : label()}
+        </Button>
       ) : (
         <div className="flex gap-2">
           <Button

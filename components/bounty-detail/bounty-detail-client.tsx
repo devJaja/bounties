@@ -11,16 +11,19 @@ import { BountyDetailSubmissionsCard } from "./bounty-detail-submissions-card";
 import { BountyDetailSkeleton } from "./bounty-detail-bounty-detail-skeleton";
 import { useBountyDetail } from "@/hooks/use-bounty-detail";
 import { FcfsApprovalPanel } from "@/components/bounty/fcfs-approval-panel";
+import { CompetitionJudging } from "@/components/bounty/competition-judging";
 import { EscrowDetailPanel } from "../bounty/escrow-detail-panel";
 import { RefundStatusTracker } from "../bounty/refund-status";
 import { FeeCalculator } from "../bounty/fee-calculator";
 import { useEscrowPool } from "@/hooks/use-escrow";
+import { authClient } from "@/lib/auth-client";
 import type { CancellationRecord } from "@/types/escrow";
 
 export function BountyDetailClient({ bountyId }: { bountyId: string }) {
   const router = useRouter();
   const { data: bounty, isPending, isError, error } = useBountyDetail(bountyId);
   const { data: pool } = useEscrowPool(bountyId);
+  const { data: session } = authClient.useSession();
   const [cancellationRecord, setCancellationRecord] =
     useState<CancellationRecord | null>(null);
 
@@ -81,6 +84,15 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
   const isCancelled =
     bounty.status === "CANCELLED" || cancellationRecord !== null;
 
+  const isCompetition = bounty.type === "COMPETITION";
+  const isCreator =
+    (session?.user as { id?: string } | undefined)?.id === bounty.createdBy;
+  const isFinalized = bounty.status === "COMPLETED";
+  const submissions = (bounty as { submissions?: unknown[] }).submissions ?? [];
+  const pastDeadline =
+    bounty.bountyWindow?.endDate != null &&
+    Date.now() > new Date(bounty.bountyWindow.endDate).getTime();
+
   return (
     <div className="flex flex-col lg:flex-row gap-10">
       {/* Main content */}
@@ -89,10 +101,21 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
         <DescriptionCard description={bounty.description} />
         {!isCancelled && pool && <EscrowDetailPanel poolId={bountyId} />}
         <RefundStatusTracker bountyId={bountyId} isCancelled={isCancelled} />
-        {bounty.type !== "FIXED_PRICE" && (
+        {bounty.type !== "FIXED_PRICE" && !isCompetition && (
           <BountyDetailSubmissionsCard bounty={bounty} />
         )}
         {bounty.type === "FIXED_PRICE" && <FcfsApprovalPanel bounty={bounty} />}
+        {isCompetition && isCreator && (pastDeadline || isFinalized) && (
+          <CompetitionJudging
+            bountyId={bountyId}
+            submissions={
+              submissions as Parameters<typeof CompetitionJudging>[0]["submissions"]
+            }
+            isFinalized={isFinalized}
+            totalReward={bounty.rewardAmount}
+            currency={bounty.rewardCurrency}
+          />
+        )}
       </div>
 
       {/* Sidebar */}

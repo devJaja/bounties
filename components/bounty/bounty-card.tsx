@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Clock } from "lucide-react";
+import { Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { BountyFieldsFragment } from "@/lib/graphql/generated";
@@ -89,6 +89,10 @@ export function BountyCard({
     statusConfig[normalizedStatus.toLowerCase()] ?? statusConfig.open;
   const isFcfsClaimed =
     bounty.type === "FIXED_PRICE" && normalizedStatus === "IN_PROGRESS";
+  const isCompetition = bounty.type === "COMPETITION";
+  const slotCount = bounty._count?.submissions ?? 0;
+  const maxParticipants = (bounty as { maxParticipants?: number | null })
+    .maxParticipants ?? null;
   const timeLeft = bounty.updatedAt
     ? formatDistanceToNow(new Date(bounty.updatedAt), { addSuffix: true })
     : "N/A";
@@ -167,6 +171,13 @@ export function BountyCard({
             <Badge variant="outline" className="text-xs px-2.5 py-1 ">
               {bounty.type.replace(/_/g, " ")}
             </Badge>
+            {isCompetition && (
+              <Badge className="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs px-2.5 py-1 flex items-center gap-1">
+                <Users className="size-3" />
+                {slotCount}
+                {maxParticipants != null ? `/${maxParticipants}` : ""} joined
+              </Badge>
+            )}
           </div>
         </CardHeader>
 
