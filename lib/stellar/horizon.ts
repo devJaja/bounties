@@ -48,6 +48,7 @@ export async function fetchAccountTransactions(
         const isIncoming = op.to === address;
         const asset =
           op.asset_type === "native" ? "XLM" : (op.asset_code ?? "XLM");
+        const counterparty = isIncoming ? op.from : op.to;
 
         return {
           id: op.id || `tx-${index}`,
@@ -58,6 +59,7 @@ export async function fetchAccountTransactions(
           status: "completed" as const,
           description: isIncoming ? "Incoming payment" : "Outgoing payment",
           transactionHash: op.transaction_hash,
+          counterparty,
         };
       })
       .filter((tx) => tx.amount > 0);

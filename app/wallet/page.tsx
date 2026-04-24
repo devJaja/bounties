@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WalletInfo } from "@/types/wallet";
 import { mockWalletWithAssets } from "@/lib/mock-wallet";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 function WalletConnectPrompt({ onConnect }: { onConnect: () => void }) {
   return (
@@ -96,6 +97,10 @@ export default function WalletPage() {
   const { data: escrow, isLoading: escrowLoading } =
     useEscrowSummary(walletAddress);
 
+  const [trackedAssets, setTrackedAssets] = useState<
+    import("@/types/wallet").WalletAsset[]
+  >([]);
+
   if (!isPreview && walletLoading) return <WalletPageSkeleton />;
 
   if (!isPreview && (!isConnected || !providerInfo)) {
@@ -108,10 +113,17 @@ export default function WalletPage() {
       ? assets.reduce((sum, a) => sum + a.usdValue, 0)
       : baseInfo.balance;
 
+  const currentAssets =
+    !isPreview && assets
+      ? assets
+      : trackedAssets.length > 0
+        ? trackedAssets
+        : baseInfo.assets;
+
   const walletInfo: WalletInfo = {
     ...baseInfo,
     balance: totalBalanceUsd,
-    assets: !isPreview && assets ? assets : baseInfo.assets,
+    assets: currentAssets,
     recentActivity: !isPreview && activity ? activity : baseInfo.recentActivity,
   };
 
@@ -148,7 +160,11 @@ export default function WalletPage() {
                   ))}
                 </div>
               ) : (
-                <AssetsList assets={walletInfo.assets} />
+                <AssetsList
+                  assets={walletInfo.assets}
+                  walletAddress={isPreview ? null : walletAddress}
+                  onAssetsChange={setTrackedAssets}
+                />
               )}
             </TabsContent>
 

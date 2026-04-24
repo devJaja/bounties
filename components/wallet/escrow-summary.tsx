@@ -3,6 +3,8 @@
 import { Lock, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EscrowSummaryData } from "@/hooks/use-wallet-data";
+import { useActiveBountiesQuery } from "@/lib/graphql/generated";
+import Link from "next/link";
 
 interface EscrowSummaryProps {
   data: EscrowSummaryData | undefined;
@@ -15,6 +17,18 @@ const formatCurrency = (amount: number) =>
   );
 
 export function EscrowSummary({ data, isLoading }: EscrowSummaryProps) {
+  const { data: bountiesData, isLoading: bountiesLoading } =
+    useActiveBountiesQuery();
+
+  const activeBounties = bountiesData?.activeBounties ?? [];
+  const bountiesEscrowTotal = activeBounties.reduce(
+    (sum, b) => sum + (b.rewardAmount ?? 0),
+    0,
+  );
+
+  const totalLocked = (data?.totalLocked ?? 0) || bountiesEscrowTotal;
+  const loading = isLoading || bountiesLoading;
+
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex items-center gap-2">
@@ -24,47 +38,57 @@ export function EscrowSummary({ data, isLoading }: EscrowSummaryProps) {
         </h3>
       </div>
 
-      {isLoading ? (
+      {loading ? (
         <div className="space-y-2">
           <Skeleton className="h-7 w-28" />
           <Skeleton className="h-4 w-40" />
+          <div className="pt-2 space-y-2 border-t border-border/50">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
         </div>
       ) : (
         <>
           <div>
-            <p className="text-2xl font-bold">
-              {formatCurrency(data?.totalLocked ?? 0)}
-            </p>
+            <p className="text-2xl font-bold">{formatCurrency(totalLocked)}</p>
             <p className="text-xs text-muted-foreground mt-1">
               Funds locked in active bounty escrows
             </p>
           </div>
 
-          {data && data.entries.length > 0 ? (
-            <div className="space-y-2 pt-2 border-t border-border/50">
-              {data.entries.map((entry) => (
+          <div className="pt-2 border-t border-border/50 space-y-2">
+            {activeBounties.length > 0 ? (
+              activeBounties.slice(0, 5).map((bounty) => (
                 <div
-                  key={entry.bountyId}
-                  className="flex items-center justify-between text-sm"
+                  key={bounty.id}
+                  className="flex items-center justify-between text-xs"
                 >
-                  <a
-                    href={`/bounty/${entry.bountyId}`}
-                    className="flex items-center gap-1 text-primary hover:underline text-xs"
+                  <Link
+                    href={`/bounty/${bounty.id}`}
+                    className="flex items-center gap-1 text-primary hover:underline truncate max-w-[60%]"
                   >
-                    Bounty #{entry.bountyId.slice(0, 8)}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                  <span className="font-medium text-xs">
-                    {entry.amount.toLocaleString()} {entry.asset}
+                    <span className="truncate">{bounty.title}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </Link>
+                  <span className="font-medium shrink-0 ml-2">
+                    {bounty.rewardAmount} {bounty.rewardCurrency}
                   </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
-              No active escrow entries found.
-            </p>
-          )}
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No active escrow entries found.
+              </p>
+            )}
+            {activeBounties.length > 5 && (
+              <Link
+                href="/bounty"
+                className="text-xs text-primary hover:underline block pt-1"
+              >
+                View all {activeBounties.length} active bounties →
+              </Link>
+            )}
+          </div>
         </>
       )}
     </div>
