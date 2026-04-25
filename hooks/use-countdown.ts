@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 
 export interface CountdownTime {
   days: number;
@@ -23,40 +23,46 @@ function compute(targetMs: number): CountdownTime {
 
 /**
  * Counts down to a target timestamp (ms).
- *
- * Uses useSyncExternalStore rather than useState + useEffect so we never
- * call setState inside an effect body or touch refs during render — both of
- * which are blocked by this project's ESLint config.
- *
- * useSyncExternalStore is the React-recommended API for subscribing to any
- * external store (here: the system clock). The subscribe function sets up the
- * interval and calls the provided callback every second; React reads the
- * current snapshot via getSnapshot on every tick and re-renders only when the
- * value actually changes.
- *
- * Accepts a number (ms timestamp) rather than a Date so callers can memoize
- * a stable primitive — new Date(str) produces a new object identity on every
- * render which would force a new subscription each cycle.
+ * Accepts a number rather than a Date so callers can pass a stable primitive —
+ * new Date(str) produces a new object identity on every render which would
+ * force a new subscription each cycle.
  */
 export function useCountdown(targetMs: number | null): CountdownTime | null {
-  const value = useSyncExternalStore(
-    // subscribe — called once; React passes a callback to notify it of changes
-    (onStoreChange) => {
-      if (targetMs === null) return () => {};
+  // Cache the last snapshot so getSnapshot returns the same object reference
+  // when nothing has changed. useSyncExternalStore uses Object.is to detect
+  // changes — returning a new object each call causes infinite re-renders.
+  const snapshotRef = useRef<CountdownTime | null>(null);
 
+  // Memoized so useSyncExternalStore doesn't re-subscribe on every render
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (targetMs === null) return () => {};
       const id = setInterval(() => {
         onStoreChange();
-        const diff = targetMs - Date.now();
-        if (diff <= 0) clearInterval(id);
+        if (targetMs - Date.now() <= 0) clearInterval(id);
       }, 1000);
-
       return () => clearInterval(id);
     },
-    // getSnapshot — called on every render and after every onStoreChange()
-    () => (targetMs !== null ? compute(targetMs) : null),
-    // getServerSnapshot — used during SSR; return null so the server renders nothing
-    () => null,
+    [targetMs],
   );
 
-  return value;
+  // Returns the cached ref unless the computed value has actually changed
+  const getSnapshot = useCallback(() => {
+    const next = targetMs !== null ? compute(targetMs) : null;
+    const prev = snapshotRef.current;
+    if (
+      prev &&
+      next &&
+      prev.days === next.days &&
+      prev.hours === next.hours &&
+      prev.minutes === next.minutes &&
+      prev.seconds === next.seconds
+    ) {
+      return prev;
+    }
+    snapshotRef.current = next;
+    return next;
+  }, [targetMs]);
+
+  return useSyncExternalStore(subscribe, getSnapshot, () => null);
 }
