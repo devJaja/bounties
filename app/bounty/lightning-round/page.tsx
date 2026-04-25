@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BountyCard } from "@/components/bounty/bounty-card";
 import { LightningRoundSchedule } from "@/components/bounty/lightning-round-schedule";
 import { MiniLeaderboard } from "@/components/leaderboard/mini-leaderboard";
+import { useCountdown } from "@/hooks/use-countdown";
 import {
   useLightningRoundBounties,
   useLightningRounds,
@@ -25,42 +26,6 @@ import {
 } from "@/hooks/use-lightning-rounds";
 import { cn } from "@/lib/utils";
 import { type BountyFieldsFragment } from "@/lib/graphql/generated";
-
-// ---------------------------------------------------------------------------
-// Countdown — reuse the same logic as the banner, self-contained here
-// ---------------------------------------------------------------------------
-
-function useCountdown(target: Date | null) {
-  const [t, setT] = useState<{
-    d: number;
-    h: number;
-    m: number;
-    s: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!target) return;
-    function tick() {
-      const diff = target!.getTime() - Date.now();
-      if (diff <= 0) {
-        setT({ d: 0, h: 0, m: 0, s: 0 });
-        return;
-      }
-      const sec = Math.floor(diff / 1000);
-      setT({
-        d: Math.floor(sec / 86400),
-        h: Math.floor((sec % 86400) / 3600),
-        m: Math.floor((sec % 3600) / 60),
-        s: sec % 60,
-      });
-    }
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [target]);
-
-  return t;
-}
 
 function Digit({ v, label }: { v: number; label: string }) {
   return (
@@ -74,10 +39,6 @@ function Digit({ v, label }: { v: number; label: string }) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// StatCard
-// ---------------------------------------------------------------------------
 
 function StatCard({
   icon,
@@ -98,10 +59,6 @@ function StatCard({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// CategorySection
-// ---------------------------------------------------------------------------
 
 function CategorySection({
   category,
@@ -135,23 +92,30 @@ function CategorySection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// RoundHeader
-// ---------------------------------------------------------------------------
-
 function RoundHeader({ round }: { round: LightningRound }) {
   const phase = getRoundPhase(round);
   const isActive = phase === "active";
   const isUpcoming = phase === "upcoming";
 
-  const countdownTarget =
-    isActive && round.endDate
-      ? new Date(round.endDate)
-      : isUpcoming && round.startDate
-        ? new Date(round.startDate)
-        : null;
+  // Stable ms timestamp so useCountdown's dep doesn't churn on every render
+  const targetMs = useMemo(() => {
+    if (isActive && round.endDate) return new Date(round.endDate).getTime();
+    if (isUpcoming && round.startDate)
+      return new Date(round.startDate).getTime();
+    return null;
+  }, [isActive, isUpcoming, round.endDate, round.startDate]);
 
-  const time = useCountdown(countdownTarget);
+  const time = useCountdown(targetMs);
+
+  const claimedOrCompleted =
+    round.stats.claimedCount + round.stats.completedCount;
+  const progressPct =
+    round.stats.totalBounties > 0
+      ? Math.min(
+          100,
+          Math.round((claimedOrCompleted / round.stats.totalBounties) * 100),
+        )
+      : 0;
 
   return (
     <div
@@ -162,7 +126,6 @@ function RoundHeader({ round }: { round: LightningRound }) {
           : "border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent",
       )}
     >
-      {/* Glow */}
       <div
         className={cn(
           "absolute -top-16 -right-16 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-20",
@@ -171,7 +134,6 @@ function RoundHeader({ round }: { round: LightningRound }) {
       />
 
       <div className="relative z-10 space-y-6">
-        {/* Badge + title */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <div
@@ -213,25 +175,23 @@ function RoundHeader({ round }: { round: LightningRound }) {
           </p>
         </div>
 
-        {/* Countdown */}
-        {time && countdownTarget && (
+        {time && targetMs && (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">
               {isActive ? "Round ends in" : "Starts in"}
             </p>
             <div className="flex items-end gap-4">
-              <Digit v={time.d} label="Days" />
+              <Digit v={time.days} label="Days" />
               <span className="text-3xl font-bold opacity-30 mb-2">:</span>
-              <Digit v={time.h} label="Hours" />
+              <Digit v={time.hours} label="Hours" />
               <span className="text-3xl font-bold opacity-30 mb-2">:</span>
-              <Digit v={time.m} label="Min" />
+              <Digit v={time.minutes} label="Min" />
               <span className="text-3xl font-bold opacity-30 mb-2">:</span>
-              <Digit v={time.s} label="Sec" />
+              <Digit v={time.seconds} label="Sec" />
             </div>
           </div>
         )}
 
-        {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard
             icon={<Trophy className="size-3.5" />}
@@ -240,8 +200,8 @@ function RoundHeader({ round }: { round: LightningRound }) {
           />
           <StatCard
             icon={<span className="text-green-400 text-xs font-bold">$</span>}
-            label={`Total Value (${round.stats.currency})`}
-            value={`$${round.stats.totalValue.toLocaleString()}`}
+            label={`Total Value (${round.stats.primaryCurrency})`}
+            value={`$${round.stats.primaryValue.toLocaleString()}`}
           />
           <StatCard
             icon={<Users className="size-3.5" />}
@@ -255,22 +215,14 @@ function RoundHeader({ round }: { round: LightningRound }) {
           />
         </div>
 
-        {/* Claim progress */}
         {round.stats.totalBounties > 0 && (
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>
-                {round.stats.claimedCount + round.stats.completedCount} /{" "}
-                {round.stats.totalBounties} bounties claimed or completed
+                {claimedOrCompleted} / {round.stats.totalBounties} bounties
+                claimed or completed
               </span>
-              <span>
-                {Math.round(
-                  ((round.stats.claimedCount + round.stats.completedCount) /
-                    round.stats.totalBounties) *
-                    100,
-                )}
-                %
-              </span>
+              <span>{progressPct}%</span>
             </div>
             <div className="h-2 w-full rounded-full bg-muted/40">
               <div
@@ -278,14 +230,7 @@ function RoundHeader({ round }: { round: LightningRound }) {
                   "h-full rounded-full transition-all duration-700",
                   isActive ? "bg-yellow-500" : "bg-primary",
                 )}
-                style={{
-                  width: `${Math.min(
-                    100,
-                    ((round.stats.claimedCount + round.stats.completedCount) /
-                      round.stats.totalBounties) *
-                      100,
-                  )}%`,
-                }}
+                style={{ width: `${progressPct}%` }}
               />
             </div>
           </div>
@@ -294,10 +239,6 @@ function RoundHeader({ round }: { round: LightningRound }) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Page skeleton
-// ---------------------------------------------------------------------------
 
 function PageSkeleton() {
   return (
@@ -312,15 +253,26 @@ function PageSkeleton() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// LightningRoundPage (Client Component)
-// ---------------------------------------------------------------------------
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-32 text-center">
+      <Zap className="size-12 text-muted-foreground mb-4" />
+      <h2 className="text-xl font-bold mb-2">No Lightning Round Found</h2>
+      <p className="text-muted-foreground mb-6">
+        There are no active or upcoming Lightning Rounds right now.
+      </p>
+      <Button asChild variant="outline">
+        <Link href="/bounty">Browse All Bounties</Link>
+      </Button>
+    </div>
+  );
+}
 
-export default function LightningRoundPage() {
+// useSearchParams requires this component to live inside a Suspense boundary
+function LightningRoundContent() {
   const searchParams = useSearchParams();
   const windowId = searchParams.get("id");
 
-  // If no specific round id, fall back to showing the active/latest round
   const {
     activeRound,
     upcomingRounds,
@@ -330,16 +282,20 @@ export default function LightningRoundPage() {
   const targetId = windowId ?? activeRound?.id ?? upcomingRounds[0]?.id ?? null;
 
   const { round, groupedByType, isLoading, isError } =
-    useLightningRoundBounties(targetId ?? "");
+    useLightningRoundBounties(targetId);
 
   const categories = Object.keys(groupedByType);
+  const isLoadingAny = isLoading || listLoading;
+
+  // covers stale ?id= param that points at a deleted/missing round
+  const showEmpty =
+    !isLoadingAny && (isError || (!round && categories.length === 0));
 
   return (
     <div className="min-h-screen text-foreground pb-20 relative overflow-hidden">
       <div className="fixed top-0 left-0 w-full h-125 bg-primary/5 rounded-full blur-[120px] -translate-y-1/2 pointer-events-none" />
 
       <div className="container mx-auto px-4 py-12 relative z-10">
-        {/* Back nav */}
         <div className="mb-6">
           <Button variant="ghost" size="sm" asChild className="gap-1.5 -ml-2">
             <Link href="/bounty">
@@ -349,24 +305,14 @@ export default function LightningRoundPage() {
           </Button>
         </div>
 
-        {isLoading || listLoading ? (
+        {isLoadingAny ? (
           <PageSkeleton />
-        ) : isError || (!round && !targetId) ? (
-          <div className="flex flex-col items-center justify-center py-32 text-center">
-            <Zap className="size-12 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-bold mb-2">No Lightning Round Found</h2>
-            <p className="text-muted-foreground mb-6">
-              There are no active or upcoming Lightning Rounds right now.
-            </p>
-            <Button asChild variant="outline">
-              <Link href="/bounty">Browse All Bounties</Link>
-            </Button>
-          </div>
-        ) : round ? (
+        ) : showEmpty ? (
+          <EmptyState />
+        ) : (
           <div className="flex flex-col lg:flex-row gap-10">
-            {/* Main content */}
             <main className="flex-1 min-w-0 space-y-10">
-              <RoundHeader round={round} />
+              {round && <RoundHeader round={round} />}
 
               {categories.length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-muted/30 rounded-2xl">
@@ -389,7 +335,6 @@ export default function LightningRoundPage() {
               )}
             </main>
 
-            {/* Sidebar */}
             <aside className="w-full lg:w-72 shrink-0">
               <div className="lg:sticky lg:top-24 space-y-6">
                 <LightningRoundSchedule maxUpcoming={3} maxPast={2} />
@@ -399,8 +344,16 @@ export default function LightningRoundPage() {
               </div>
             </aside>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
+  );
+}
+
+export default function LightningRoundPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <LightningRoundContent />
+    </Suspense>
   );
 }

@@ -1,54 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { Zap, Clock, Trophy, ArrowRight, Flame } from "lucide-react";
+import { Zap, Trophy, ArrowRight, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useCountdown } from "@/hooks/use-countdown";
 import {
   type LightningRound,
   getRoundPhase,
   getRoundCountdownTarget,
 } from "@/hooks/use-lightning-rounds";
-
-// ---------------------------------------------------------------------------
-// Countdown hook — isolated so it only re-renders the timer
-// ---------------------------------------------------------------------------
-
-function useCountdown(target: Date | null) {
-  const [timeLeft, setTimeLeft] = useState<{
-    days: number;
-    hours: number;
-    minutes: number;
-    seconds: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!target) return;
-
-    function compute() {
-      const diff = target!.getTime() - Date.now();
-      if (diff <= 0) {
-        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-      const totalSeconds = Math.floor(diff / 1000);
-      setTimeLeft({
-        days: Math.floor(totalSeconds / 86400),
-        hours: Math.floor((totalSeconds % 86400) / 3600),
-        minutes: Math.floor((totalSeconds % 3600) / 60),
-        seconds: totalSeconds % 60,
-      });
-    }
-
-    compute();
-    const id = setInterval(compute, 1000);
-    return () => clearInterval(id);
-  }, [target]);
-
-  return timeLeft;
-}
 
 // ---------------------------------------------------------------------------
 // CountdownUnit
@@ -81,11 +44,29 @@ export function LightningRoundBanner({
   className,
 }: LightningRoundBannerProps) {
   const phase = getRoundPhase(round);
-  const countdownTarget = getRoundCountdownTarget(round);
-  const timeLeft = useCountdown(countdownTarget);
-
   const isActive = phase === "active";
-  const isUpcoming = phase === "upcoming";
+
+  /**
+   * Memoize the target as a number so useCountdown's dep array stays stable.
+   * getRoundCountdownTarget already returns a number | null — memoize it so
+   * the value only changes when the round's dates actually change.
+   */
+  const targetMs = useMemo(
+    () => getRoundCountdownTarget(round),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [round.startDate, round.endDate, round.status],
+  );
+  const timeLeft = useCountdown(targetMs);
+
+  const claimedOrCompleted =
+    round.stats.claimedCount + round.stats.completedCount;
+  const progressPct =
+    round.stats.totalBounties > 0
+      ? Math.min(
+          100,
+          Math.round((claimedOrCompleted / round.stats.totalBounties) * 100),
+        )
+      : 0;
 
   return (
     <div
@@ -158,10 +139,10 @@ export function LightningRoundBanner({
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-green-400">
-                  ${round.stats.totalValue.toLocaleString()}
+                  ${round.stats.primaryValue.toLocaleString()}
                 </span>
                 <span className="text-muted-foreground">
-                  {round.stats.currency} total
+                  {round.stats.primaryCurrency} total
                 </span>
               </div>
               {round.stats.categories.slice(0, 3).map((cat) => (
@@ -178,7 +159,7 @@ export function LightningRoundBanner({
 
           {/* Right — countdown + CTA */}
           <div className="flex flex-col items-start md:items-end gap-4 shrink-0">
-            {timeLeft && countdownTarget && (
+            {timeLeft && targetMs && (
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground text-center md:text-right">
                   {isActive ? "Round ends in" : "Starts in"}
@@ -211,34 +192,22 @@ export function LightningRoundBanner({
           </div>
         </div>
 
-        {/* Progress bar — claimed / total */}
+        {/* Progress bar — shown for active rounds with at least one bounty */}
         {isActive && round.stats.totalBounties > 0 && (
           <div className="mt-6 space-y-1.5">
             <div className="flex justify-between text-xs text-muted-foreground">
+              {/* Label consistent with RoundHeader: "claimed or completed" */}
               <span>
-                {round.stats.claimedCount + round.stats.completedCount} of{" "}
-                {round.stats.totalBounties} claimed
+                {claimedOrCompleted} of {round.stats.totalBounties} claimed or
+                completed
               </span>
-              <span>
-                {Math.round(
-                  ((round.stats.claimedCount + round.stats.completedCount) /
-                    round.stats.totalBounties) *
-                    100,
-                )}
-                %
-              </span>
+              {/* Same Math.min guard as the width so the two values can't diverge */}
+              <span>{progressPct}%</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-muted/40">
               <div
                 className="h-full rounded-full bg-yellow-500 transition-all duration-700"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    ((round.stats.claimedCount + round.stats.completedCount) /
-                      round.stats.totalBounties) *
-                      100,
-                  )}%`,
-                }}
+                style={{ width: `${progressPct}%` }}
               />
             </div>
           </div>

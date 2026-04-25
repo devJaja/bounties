@@ -7,6 +7,13 @@ import {
 } from "@/lib/graphql/generated";
 
 /**
+ * Per-currency value breakdown.
+ * Stored as a map so mixed-currency rounds are represented accurately
+ * rather than summing different currencies under one label.
+ */
+export type CurrencyTotals = Record<string, number>;
+
+/**
  * Represents a Lightning Round (Bounty Window) with enriched metadata.
  * Derived from the existing BountyWindowType in the schema.
  */
@@ -16,23 +23,40 @@ export interface LightningRound {
   status: string;
   startDate: string | null;
   endDate: string | null;
-  /** Bounties associated with this round */
   bounties: BountyFieldsFragment[];
-  /** Computed stats */
   stats: {
     totalBounties: number;
-    totalValue: number;
-    currency: string;
+    /**
+     * Value totals broken down by currency.
+     * Iterate this for multi-currency display; use primaryCurrency/primaryValue
+     * for single-currency shorthand.
+     */
+    currencyTotals: CurrencyTotals;
+    /** Currency with the highest total value — safe for single-currency UI */
+    primaryCurrency: string;
+    /** Value in primaryCurrency */
+    primaryValue: number;
     claimedCount: number;
     completedCount: number;
     categories: string[];
   };
 }
 
+// ---------------------------------------------------------------------------
+// getRoundPhase
+// ---------------------------------------------------------------------------
+
 /**
- * Derives Lightning Round state from a window's dates.
- * We compute this client-side — the backend exposes `status` on BountyWindowType
- * but it may not always be reliable, so we cross-check with dates.
+ * Derives Lightning Round state from a window's dates and status.
+ *
+ * Guard rules (applied in order):
+ *  1. status === "completed"              → ended
+ *  2. endDate in the past                 → ended
+ *  3. startDate in the future             → upcoming
+ *  4. now is between startDate and endDate → active
+ *  5. startDate present, no endDate, now >= startDate → active
+ *  6. No dates at all                     → upcoming  ← safe default;
+ *     avoids rendering a false "Live Now" banner on incomplete data
  */
 export function getRoundPhase(
   round: Pick<LightningRound, "startDate" | "endDate" | "status">,
@@ -44,25 +68,46 @@ export function getRoundPhase(
   if (round.status?.toLowerCase() === "completed") return "ended";
   if (end && now > end) return "ended";
   if (start && now < start) return "upcoming";
+  // No dates at all → upcoming, not active, to avoid false-positive live UI
+  if (!start && !end) return "upcoming";
   return "active";
 }
 
+// ---------------------------------------------------------------------------
+// getRoundCountdownTarget
+// ---------------------------------------------------------------------------
+
 /**
- * Returns ms until round starts or ends, depending on phase.
- * Returns null if no relevant date is available.
+ * Returns the countdown target as a numeric timestamp (ms).
+ *
+ * Returns a number — NOT a Date object — so callers can pass it directly to
+ * useCountdown. A numeric value is referentially stable across renders;
+ * `new Date(str)` produces a new object identity on every render, which
+ * caused the countdown interval to be torn down on every re-render cycle.
  */
 export function getRoundCountdownTarget(
   round: Pick<LightningRound, "startDate" | "endDate" | "status">,
-): Date | null {
+): number | null {
   const phase = getRoundPhase(round);
-  if (phase === "upcoming" && round.startDate) return new Date(round.startDate);
-  if (phase === "active" && round.endDate) return new Date(round.endDate);
+  if (phase === "upcoming" && round.startDate)
+    return new Date(round.startDate).getTime();
+  if (phase === "active" && round.endDate)
+    return new Date(round.endDate).getTime();
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// groupBountiesByWindow (internal)
+// ---------------------------------------------------------------------------
 
 /**
  * Groups bounties by their bountyWindow, building a LightningRound[] list.
  * Bounties without a bountyWindow are excluded.
+ *
+ * Within each phase, rounds are sorted by the most useful date:
+ *   active   → ascending endDate   (soonest to expire first)
+ *   upcoming → ascending startDate (soonest to start first)
+ *   ended    → descending endDate  (most recently ended first)
  */
 function groupBountiesByWindow(
   bounties: BountyFieldsFragment[],
@@ -83,8 +128,9 @@ function groupBountiesByWindow(
         bounties: [],
         stats: {
           totalBounties: 0,
-          totalValue: 0,
-          currency: bounty.rewardCurrency,
+          currencyTotals: {},
+          primaryCurrency: "",
+          primaryValue: 0,
           claimedCount: 0,
           completedCount: 0,
           categories: [],
@@ -94,10 +140,12 @@ function groupBountiesByWindow(
 
     const round = windowMap.get(id)!;
     round.bounties.push(bounty);
-
-    // Aggregate stats
     round.stats.totalBounties += 1;
-    round.stats.totalValue += bounty.rewardAmount ?? 0;
+
+    // Per-currency totals
+    const ccy = bounty.rewardCurrency;
+    round.stats.currencyTotals[ccy] =
+      (round.stats.currencyTotals[ccy] ?? 0) + (bounty.rewardAmount ?? 0);
 
     const s = bounty.status.toLowerCase();
     if (s === "in_progress") round.stats.claimedCount += 1;
@@ -109,10 +157,43 @@ function groupBountiesByWindow(
     }
   }
 
-  // Sort: active first, then upcoming, then ended
-  const phaseOrder = { active: 0, upcoming: 1, ended: 2 };
+  // Resolve primaryCurrency — highest total value wins
+  for (const round of windowMap.values()) {
+    const entries = Object.entries(round.stats.currencyTotals);
+    if (entries.length > 0) {
+      const [topCurrency, topValue] = entries.reduce((best, curr) =>
+        curr[1] > best[1] ? curr : best,
+      );
+      round.stats.primaryCurrency = topCurrency;
+      round.stats.primaryValue = topValue;
+    }
+  }
+
+  const phaseOrder = { active: 0, upcoming: 1, ended: 2 } as const;
+
   return Array.from(windowMap.values()).sort((a, b) => {
-    return phaseOrder[getRoundPhase(a)] - phaseOrder[getRoundPhase(b)];
+    const phaseA = getRoundPhase(a);
+    const phaseB = getRoundPhase(b);
+
+    if (phaseA !== phaseB) {
+      return phaseOrder[phaseA] - phaseOrder[phaseB];
+    }
+
+    // Within the same phase, sort by the most meaningful date
+    if (phaseA === "active") {
+      const eA = a.endDate ? new Date(a.endDate).getTime() : Infinity;
+      const eB = b.endDate ? new Date(b.endDate).getTime() : Infinity;
+      return eA - eB; // soonest to expire first
+    }
+    if (phaseA === "upcoming") {
+      const sA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+      const sB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+      return sA - sB; // soonest to start first
+    }
+    // ended — most recently ended first
+    const eA = a.endDate ? new Date(a.endDate).getTime() : 0;
+    const eB = b.endDate ? new Date(b.endDate).getTime() : 0;
+    return eB - eA;
   });
 }
 
@@ -123,10 +204,6 @@ function groupBountiesByWindow(
 /**
  * Returns the currently active Lightning Round (if any), derived from
  * the existing `activeBounties` query — no new backend work needed.
- *
- * @example
- * const { round, isLoading } = useActiveLightningRound();
- * if (round) return <LightningRoundBanner round={round} />;
  */
 export function useActiveLightningRound() {
   const { data, isLoading, isError, error } = useActiveBountiesQuery();
@@ -136,7 +213,6 @@ export function useActiveLightningRound() {
     const rounds = groupBountiesByWindow(
       data.activeBounties as BountyFieldsFragment[],
     );
-    // Return the first active round
     return rounds.find((r) => getRoundPhase(r) === "active") ?? null;
   }, [data]);
 
@@ -148,18 +224,22 @@ export function useActiveLightningRound() {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns all Lightning Rounds (past, active, upcoming) by fetching
- * bounties filtered by a specific window, or all bounties.
+ * Returns all Lightning Rounds (past, active, upcoming) by grouping bounties
+ * from the paginated bounties query.
  *
- * The backend's `BountyQueryInput.bountyWindowId` filter lets us scope
- * bounties to a specific round when the caller knows the window ID.
+ * Tradeoff: rounds are derived from the bounty list rather than a dedicated
+ * "list windows" query (which doesn't exist in the current schema). The
+ * `limit` parameter controls how many bounties are fetched. The default of
+ * 200 is intentionally generous so older rounds appear in the schedule
+ * widget. If the platform grows significantly, a dedicated bountyWindows
+ * query should be added server-side.
  *
- * @example
- * const { rounds, activeRound, upcomingRounds } = useLightningRounds();
+ * @param params - Optional BountyQueryInput overrides.
+ * @param limit  - Max bounties to fetch. Defaults to 200.
  */
-export function useLightningRounds(params?: BountyQueryInput) {
+export function useLightningRounds(params?: BountyQueryInput, limit = 200) {
   const { data, isLoading, isError, error, refetch } = useBountiesQuery({
-    query: { limit: 100, sortBy: "createdAt", sortOrder: "desc", ...params },
+    query: { limit, sortBy: "createdAt", sortOrder: "desc", ...params },
   });
 
   const { rounds, activeRound, upcomingRounds, endedRounds } = useMemo(() => {
@@ -195,20 +275,27 @@ export function useLightningRounds(params?: BountyQueryInput) {
  * Fetches bounties for a specific Lightning Round by bountyWindowId.
  * Groups them by bounty type for the dedicated round page.
  *
- * @example
- * const { round, groupedByType } = useLightningRoundBounties(windowId);
+ * Query is disabled when windowId is falsy to avoid firing a spurious
+ * request on first mount before the active round ID is resolved.
+ *
+ * Graceful degradation: if `round` is null but `groupedByType` has data
+ * (e.g. stale cache / partial fragment), the page can still render the
+ * category sections without a header.
  */
-export function useLightningRoundBounties(windowId: string) {
-  const { data, isLoading, isError, error } = useBountiesQuery({
-    query: { bountyWindowId: windowId, limit: 100 },
-  });
+export function useLightningRoundBounties(windowId: string | null) {
+  const enabled = !!windowId;
+
+  const { data, isLoading, isError, error } = useBountiesQuery(
+    { query: { bountyWindowId: windowId ?? "", limit: 100 } },
+    { enabled },
+  );
 
   const { round, groupedByType } = useMemo(() => {
     const bounties = (data?.bounties?.bounties as BountyFieldsFragment[]) ?? [];
+
     const rounds = groupBountiesByWindow(bounties);
     const found = rounds[0] ?? null;
 
-    // Group bounties by type for the category-section layout on the round page
     const grouped: Record<string, BountyFieldsFragment[]> = {};
     for (const b of bounties) {
       const key = b.type.replace(/_/g, " ");
@@ -219,5 +306,5 @@ export function useLightningRoundBounties(windowId: string) {
     return { round: found, groupedByType: grouped };
   }, [data]);
 
-  return { round, groupedByType, isLoading, isError, error };
+  return { round, groupedByType, isLoading, isError, error, enabled };
 }
