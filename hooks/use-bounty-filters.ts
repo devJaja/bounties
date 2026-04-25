@@ -5,6 +5,7 @@ export const BOUNTY_TYPES = [
   { value: "FIXED_PRICE", label: "Fixed Price" },
   { value: "MILESTONE_BASED", label: "Milestone Based" },
   { value: "COMPETITION", label: "Competition" },
+  { value: "MULTI_WINNER_MILESTONE", label: "Multi-Winner Milestone" },
 ];
 
 export const STATUSES = [

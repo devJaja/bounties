@@ -90,6 +90,35 @@ const mockBounties: BountyFieldsFragment[] = [
     bountyWindow: null,
     _count: { __typename: "BountyCount", submissions: 5 },
   },
+  {
+    __typename: "Bounty",
+    id: "4",
+    title: "Multi-milestone contributor sprint",
+    description:
+      "Open sprint with milestone-based rewards across multiple winners",
+    status: "OPEN",
+    type: "MULTI_WINNER_MILESTONE",
+    rewardAmount: 3000,
+    rewardCurrency: "USDC",
+    createdAt: "2023-12-31T00:00:00Z",
+    updatedAt: "2023-12-31T00:00:00Z",
+    organizationId: "org-2",
+    projectId: null,
+    bountyWindowId: null,
+    githubIssueUrl: "https://github.com/test/repo/issues/4",
+    githubIssueNumber: 4,
+    createdBy: "user-2",
+    organization: {
+      __typename: "BountyOrganization",
+      id: "org-2",
+      name: "Beta Corp",
+      logo: null,
+      slug: null,
+    },
+    project: null,
+    bountyWindow: null,
+    _count: { __typename: "BountyCount", submissions: 2 },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -115,10 +144,10 @@ describe("useBountyFilters", () => {
 
     it("filters to only open bounties by default (statusFilter = 'open')", () => {
       const { result } = renderHook(() => useBountyFilters(mockBounties));
-      // bounty 2 is 'IN_PROGRESS' — should be excluded
-      expect(result.current.filteredBounties).toHaveLength(2);
+      // bounty 2 is 'IN_PROGRESS' — should be excluded; bounties 1, 3, 4 are OPEN
+      expect(result.current.filteredBounties).toHaveLength(3);
       expect(result.current.filteredBounties.map((b) => b.id)).toEqual(
-        expect.arrayContaining(["1", "3"]),
+        expect.arrayContaining(["1", "3", "4"]),
       );
     });
 
@@ -173,8 +202,8 @@ describe("useBountyFilters", () => {
       act(() => {
         result.current.setSearchQuery("");
       });
-      // back to default: 2 open bounties
-      expect(result.current.filteredBounties).toHaveLength(2);
+      // back to default: 3 open bounties (1, 3, 4)
+      expect(result.current.filteredBounties).toHaveLength(3);
     });
 
     it("marks hasActiveFilters true when searchQuery is set", () => {
@@ -229,6 +258,18 @@ describe("useBountyFilters", () => {
         expect.arrayContaining(["1", "3"]),
       );
     });
+
+    it("toggleType(MULTI_WINNER_MILESTONE) isolates that type correctly", () => {
+      const { result } = renderHook(() => useBountyFilters(mockBounties));
+
+      act(() => {
+        result.current.toggleType("MULTI_WINNER_MILESTONE");
+      });
+
+      // Only bounty 4 is MULTI_WINNER_MILESTONE and OPEN
+      expect(result.current.filteredBounties).toHaveLength(1);
+      expect(result.current.filteredBounties[0].id).toBe("4");
+    });
   });
 
   describe("organization filter", () => {
@@ -255,8 +296,11 @@ describe("useBountyFilters", () => {
         result.current.toggleOrg("Beta Corp");
       });
 
-      expect(result.current.filteredBounties).toHaveLength(1);
-      expect(result.current.filteredBounties[0].id).toBe("2");
+      // Beta Corp has bounty 2 (IN_PROGRESS) and bounty 4 (OPEN) = 2 total
+      expect(result.current.filteredBounties).toHaveLength(2);
+      expect(result.current.filteredBounties.map((b) => b.id)).toEqual(
+        expect.arrayContaining(["2", "4"]),
+      );
     });
   });
 
@@ -268,9 +312,11 @@ describe("useBountyFilters", () => {
       act(() => {
         result.current.setRewardRange([1000, 5000]);
       });
-      // statusFilter is still 'open' → toUpperCase() = 'OPEN', bounty 2 (IN_PROGRESS) is excluded
-      expect(result.current.filteredBounties).toHaveLength(1);
-      expect(result.current.filteredBounties[0].id).toBe("3");
+      // statusFilter is still 'open'; bounty 3 ($5000) and bounty 4 ($3000) pass, bounty 1 ($500) is excluded
+      expect(result.current.filteredBounties).toHaveLength(2);
+      expect(result.current.filteredBounties.map((b) => b.id)).toEqual(
+        expect.arrayContaining(["3", "4"]),
+      );
     });
   });
 
@@ -344,9 +390,9 @@ describe("useBountyFilters", () => {
     it("newest (default) orders by createdAt descending", () => {
       const { result } = renderHook(() => useBountyFilters(mockBounties));
 
-      // statusFilter='open': bounties 1 (Jan 3) and 3 (Jan 1)
+      // statusFilter='open': bounties 1 (Jan 3), 3 (Jan 1), 4 (Dec 31)
       const ids = result.current.filteredBounties.map((b) => b.id);
-      expect(ids).toEqual(["1", "3"]);
+      expect(ids).toEqual(["1", "3", "4"]);
     });
 
     it("highest_reward orders by rewardAmount descending", () => {
@@ -356,9 +402,9 @@ describe("useBountyFilters", () => {
         result.current.setSortOption("highest_reward");
       });
 
-      // bounty 3 ($5000) before bounty 1 ($500)
+      // bounty 3 ($5000) > bounty 4 ($3000) > bounty 1 ($500)
       const ids = result.current.filteredBounties.map((b) => b.id);
-      expect(ids).toEqual(["3", "1"]);
+      expect(ids).toEqual(["3", "4", "1"]);
     });
 
     it("recently_updated orders by updatedAt descending", () => {
@@ -368,9 +414,9 @@ describe("useBountyFilters", () => {
         result.current.setSortOption("recently_updated");
       });
 
-      // bounty 1 (Jan 3) before bounty 3 (Jan 1)
+      // bounty 1 (Jan 3) > bounty 3 (Jan 1) > bounty 4 (Dec 31)
       const ids = result.current.filteredBounties.map((b) => b.id);
-      expect(ids).toEqual(["1", "3"]);
+      expect(ids).toEqual(["1", "3", "4"]);
     });
   });
 });

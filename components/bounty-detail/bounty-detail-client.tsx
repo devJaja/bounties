@@ -26,10 +26,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MilestoneSubmissionCard } from "./milestone-submission-card";
 import { Model4MaintainerDashboard } from "./model4-maintainer-dashboard";
 
-/** Typed adapter: centralises the fallback logic for Model-4 fields.
- * Until the GraphQL fragment is extended these fields come from mocks.
+/** Returns milestones with mock fallback. Safe for public display since
+ * milestones are structural (titles/descriptions), not personal data.
  */
-function getMilestoneData(
+function getMilestones(
+  bounty: ReturnType<
+    (typeof import("@/hooks/use-bounty-detail"))["useBountyDetail"]
+  >["data"],
+): import("@/types/bounty").Milestone[] {
+  return bounty?.milestones ?? MOCK_MODEL4_MILESTONES;
+}
+
+/** Returns contributorProgress WITHOUT mock fallback — only real API data.
+ * Used for the public MilestoneFunnel to prevent mock users (Alice, Bob…)
+ * from being displayed to unauthenticated visitors.
+ */
+function getRealContributors(
+  bounty: ReturnType<
+    (typeof import("@/hooks/use-bounty-detail"))["useBountyDetail"]
+  >["data"],
+): import("@/types/bounty").ContributorProgress[] {
+  return bounty?.contributorProgress ?? [];
+}
+
+/** Returns full data including mock contributorProgress fallback.
+ * Used only in authenticated sections (contributor progress card,
+ * maintainer dashboard) where mocks are acceptable during prototyping.
+ */
+function getFullMilestoneData(
   bounty: ReturnType<
     (typeof import("@/hooks/use-bounty-detail"))["useBountyDetail"]
   >["data"],
@@ -117,35 +141,32 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
         <HeaderCard bounty={bounty} />
         <DescriptionCard description={bounty.description} />
 
-        {bounty.type === "MULTI_WINNER_MILESTONE" &&
-          (() => {
-            const { milestones, contributorProgress } =
-              getMilestoneData(bounty);
-            return (
-              <Card className="border-gray-800 bg-background-card/50 backdrop-blur-sm overflow-hidden">
-                <CardHeader className="border-b border-gray-800/50 pb-4">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    Milestone Funnel
-                    <span className="text-xs font-normal text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                      Multi-Winner
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <MilestoneFunnel
-                    milestones={milestones}
-                    contributors={contributorProgress}
-                  />
-                </CardContent>
-              </Card>
-            );
-          })()}
+        {bounty.type === "MULTI_WINNER_MILESTONE" && (
+          <Card className="border-gray-800 bg-background-card/50 backdrop-blur-sm overflow-hidden">
+            <CardHeader className="border-b border-gray-800/50 pb-4">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                Milestone Funnel
+                <span className="text-xs font-normal text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  Multi-Winner
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {/* contributors is intentionally real-data-only: mock users
+                  (Alice, Bob…) must not be shown to unauthenticated visitors */}
+              <MilestoneFunnel
+                milestones={getMilestones(bounty)}
+                contributors={getRealContributors(bounty)}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {bounty.type === "MULTI_WINNER_MILESTONE" &&
           session?.user?.id &&
           (() => {
             const { milestones, contributorProgress } =
-              getMilestoneData(bounty);
+              getFullMilestoneData(bounty);
             const myProgress = contributorProgress.find(
               (c) => c.userId === session.user.id,
             );
@@ -162,7 +183,7 @@ export function BountyDetailClient({ bountyId }: { bountyId: string }) {
           session?.user?.id === bounty.createdBy &&
           (() => {
             const { milestones, contributorProgress } =
-              getMilestoneData(bounty);
+              getFullMilestoneData(bounty);
             return (
               <Model4MaintainerDashboard
                 milestones={milestones}
