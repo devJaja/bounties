@@ -232,7 +232,9 @@ export function Model4MaintainerDashboard({
                             <UserMinus className="size-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Remove from slot</TooltipContent>
+                        <TooltipContent>
+                          Remove from slot [Coming soon]
+                        </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
