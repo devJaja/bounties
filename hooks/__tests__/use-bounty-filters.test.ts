@@ -1,11 +1,11 @@
 import { renderHook, act } from "@testing-library/react";
 import { useBountyFilters } from "../use-bounty-filters";
-import { type BountyFieldsFragment } from "@/lib/graphql/generated";
+import { type Bounty } from "@/types/bounty";
 
 // ---------------------------------------------------------------------------
 // Minimal fixture data — 3 bounties covering different types, orgs, statuses
 // ---------------------------------------------------------------------------
-const mockBounties: BountyFieldsFragment[] = [
+const mockBounties: Bounty[] = [
   {
     __typename: "Bounty",
     id: "1",

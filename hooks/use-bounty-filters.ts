@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { type BountyFieldsFragment } from "@/lib/graphql/generated";
+import { type Bounty } from "@/types/bounty";
 
 export const BOUNTY_TYPES = [
   { value: "FIXED_PRICE", label: "Fixed Price" },
@@ -20,7 +20,7 @@ export const STATUSES = [
   { value: "all", label: "All Statuses" },
 ];
 
-export function useBountyFilters(allBounties: BountyFieldsFragment[]) {
+export function useBountyFilters(allBounties: Bounty[]) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
